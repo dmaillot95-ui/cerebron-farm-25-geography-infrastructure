@@ -1,0 +1,81 @@
+name: CEREBRON Farm 25 Geography Infrastructure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {role: GEOGRAPHY_SYSTEMS_ARCHITECT, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: GIS_SPATIAL_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: TRANSPORT_NETWORK_ENGINEER, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: RAIL_INFRASTRUCTURE_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: ROAD_MOBILITY_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: PORT_LOGISTICS_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: WATER_INFRASTRUCTURE_ENGINEER, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: WASTEWATER_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: ENERGY_INFRASTRUCTURE_PLANNER, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: TELECOM_DIGITAL_INFRASTRUCTURE_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: URBAN_LAND_USE_PLANNER, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: HOUSING_BUILT_ENVIRONMENT_SPECIALIST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: CRITICAL_INFRASTRUCTURE_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: NATURAL_HAZARDS_ANALYST, model: huggingface-projects/gemma-2-9b-it}
+          - {role: CLIMATE_ADAPTATION_INFRASTRUCTURE_SPECIALIST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: INFRASTRUCTURE_MAINTENANCE_ASSET_MANAGER, model: huggingface-projects/gemma-2-9b-it}
+          - {role: COST_PHASING_FINANCE_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: RESILIENCE_INTERDEPENDENCY_RED_TEAM, model: huggingface-projects/gemma-2-9b-it}
+          - {role: INDEPENDENT_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct}
+          - {role: OMEGA_GEOGRAPHY_INFRASTRUCTURE_JUDGE, model: huggingface-projects/gemma-2-9b-it}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install gradio_client
+      - run: python worker/agent.py
+        env:
+          ROLE: ${{ matrix.role }}
+          MODEL: ${{ matrix.model }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.role }}
+          path: results/${{ matrix.role }}.json
+
+  omega:
+    if: always()
+    needs: agents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agent-*
+          path: gathered
+          merge-multiple: true
+      - run: |
+          python - <<'PY'
+          import json, pathlib
+          rows=[]
+          for p in pathlib.Path('gathered').glob('*.json'):
+              try: rows.append(json.loads(p.read_text()))
+              except Exception: pass
+          packet={
+            'roles_received':len(rows),
+            'successful_external_ai_calls':sum(bool(r.get('success')) for r in rows),
+            'model_families':sorted(set(r.get('model','') for r in rows if r.get('model'))),
+            'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT',
+            'results':rows
+          }
+          pathlib.Path('omega').mkdir(exist_ok=True)
+          pathlib.Path('omega/packet.json').write_text(json.dumps(packet,ensure_ascii=False,indent=2))
+          print(json.dumps({k:packet[k] for k in ('roles_received','successful_external_ai_calls','model_families','status')}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geography-infrastructure-omega-packet
+          path: omega/packet.json
